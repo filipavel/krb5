@@ -102,6 +102,7 @@ struct k_opts
 
     char *principal_name;
     char *service_name;
+    char *service_class;
     char *keytab_name;
     char *k5_in_cache_name;
     char *k5_out_cache_name;
@@ -132,7 +133,7 @@ struct k5_data
  * *(struct[2]), the array index which was specified is stored in *index, and
  * long_getopt() returns 0.
  */
-const char *shopts = "r:fpFPn54aAVl:s:c:kit:T:RS:vX:CEI:";
+const char *shopts = "r:fpFPn54aAVl:s:c:kit:T:RS:vX:CEI:N:";
 
 #define USAGE_BREAK "\n\t"
 
@@ -145,7 +146,7 @@ usage(void)
               "\t[-f | -F] [-p | -P] [-n] [-a | -A] [-C] [-E]\n"
               "\t[--request-pac | --no-request-pac]\n"
               "\t[-v] [-R] [-k [-i|-t keytab_file]] [-c cachename]\n"
-              "\t[-S service_name] [-I input_ccache] [-T ticket_armor_cache]\n"
+              "\t[-S service_name] [-I input_ccache] [-T ticket_armor_cache] [-N service_class]\n"
               "\t[-X <attribute>[=<value>]] [principal]\n"
               "\n"), progname);
 
@@ -170,6 +171,7 @@ usage(void)
     fprintf(stderr, _("\t-t filename of keytab to use\n"));
     fprintf(stderr, _("\t-c Kerberos 5 cache name\n"));
     fprintf(stderr, _("\t-S service\n"));
+    fprintf(stderr, _("\t-N service class\n"));
     fprintf(stderr, _("\t-I input credential cache\n"));
     fprintf(stderr, _("\t-T armor credential cache\n"));
     fprintf(stderr, _("\t-X <attribute>[=<value>]\n"));
@@ -298,6 +300,9 @@ parse_options(int argc, char **argv, struct k_opts *opts)
             break;
         case 'S':
             opts->service_name = optarg;
+            break;
+        case 'N':
+            opts->service_class = optarg;
             break;
         case 'k':
             opts->action = INIT_KT;
@@ -453,8 +458,17 @@ k5_begin(struct k_opts *opts, struct k5_data *k5)
             defcache_princ = NULL;
     }
 
+    if (opts->action == INIT_KT && opts->service_class && opts->principal_name) {
+        /* Use the default host/service name. */
+        ret = krb5_sname_to_principal(k5->ctx, opts->principal_name, opts->service_class, KRB5_NT_SRV_HST,
+                                      &k5->me);
+        if (ret) {
+            com_err(progname, ret,
+                    _("when creating default server principal name"));
+            goto cleanup;
+        }
     /* Choose a client principal name. */
-    if (opts->principal_name != NULL) {
+    } else if (opts->principal_name != NULL) {
         /* Use the specified principal name. */
         ret = krb5_parse_name_flags(k5->ctx, opts->principal_name, flags,
                                     &k5->me);
